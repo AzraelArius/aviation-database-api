@@ -1,0 +1,53 @@
+name: aviation-database-api
+
+x-application: &application
+  image: aviation-database-api:local
+  build: .
+  environment: &database-environment
+    DATABASE_URL: "host=db port=5432"
+    PGDATABASE: ${POSTGRES_DB:-aviation}
+    PGUSER: ${POSTGRES_USER:-aviation_dev}
+    PGPASSWORD: ${POSTGRES_PASSWORD:-local_only_aviation}
+    FLASK_ENV: production
+    FLASK_DEBUG: "0"
+    WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+
+services:
+  db:
+    image: postgres:16.15-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-aviation}
+      POSTGRES_USER: ${POSTGRES_USER:-aviation_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_only_aviation}
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+  init:
+    <<: *application
+    command: ["python", "scripts/database.py", "bootstrap"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *application
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-data:

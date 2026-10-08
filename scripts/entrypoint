@@ -1,0 +1,25 @@
+#!/bin/bash
+# Copyright (c) BDist Development Team
+# Distributed under the terms of the Modified BSD License.
+set -o errexit
+set -o pipefail
+set -o nounset
+: "${DATABASE_URL:?Set DATABASE_URL before starting the application}"
+python - <<'PY'
+import os
+import sys
+import time
+import psycopg
+
+deadline = time.monotonic() + 30
+while True:
+    try:
+        with psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=3):
+            break
+    except psycopg.OperationalError:
+        if time.monotonic() >= deadline:
+            sys.exit('PostgreSQL did not become available within 30 seconds.')
+        sys.stderr.write('Waiting for PostgreSQL...\n')
+        time.sleep(1)
+PY
+exec "$@"
